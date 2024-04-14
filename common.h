@@ -3,6 +3,8 @@
 
 constexpr bool DEBUG = true;
 constexpr uint64_t MAX_DATA_SIZE = 64000;
+constexpr uint8_t MAX_WAIT = 5;
+constexpr uint8_t MAX_RETRANSMITS = 5;
 
 typedef struct __attribute__((__packed__)) {
 	uint8_t type;
@@ -50,6 +52,9 @@ struct sockaddr_in udp_get_server_address(char const *host, uint16_t port);
 
 
 uint64_t generateSimpleRandomUint64();
+
+void setSocketTimeout(int socket_fd, int seconds);
+
 
 void tcpSend(int socket_fd, void *data, uint32_t size);
 void udpSend(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr);

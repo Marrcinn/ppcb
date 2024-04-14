@@ -12,11 +12,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 // Probably not the best way to generate a random number,
 // but it's good enough for this
 uint64_t generateSimpleRandomUint64() {
-	srand(time(NULL));
+	srand(time(NULL) * getpid());
 	uint64_t upper = rand();
 	uint64_t lower = rand();
 	return (upper << 32) | lower;
@@ -71,7 +72,13 @@ struct sockaddr_in udp_get_server_address(char const *host, uint16_t port) {
 	return send_address;
 }
 
-
+void setSocketTimeout(int socket_fd, int seconds) {
+	struct timeval timeout;
+	timeout.tv_sec = seconds;
+	timeout.tv_usec = 0;
+	setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout));
+	setsockopt(socket_fd, SOL_SOCKET, SO_SNDTIMEO, (char *)&timeout, sizeof(timeout));
+}
 
 void tcpSend(int socket_fd, void *data, uint32_t size) {
 	uint32_t bytes_sent = 0;

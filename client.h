@@ -22,6 +22,7 @@ private:
 	uint64_t session_id;
 	uint64_t cur_packet_number = 0;
 	std::shared_ptr<char> data;
+	uint8_t buffer[64400];
 	uint64_t payload_length;
 
 void send(void *data, uint32_t size) {
@@ -91,7 +92,7 @@ public:
 	void establish_connection() {
 		if (this->protocol == "tcp") {
 			if (connect(this->socket_fd, (struct sockaddr *) &this->server_addr, sizeof(this->server_addr)) < 0) {
-				throw std::runtime_error("ERROR: connect failed\n");
+				throw std::runtime_error("ERROR: CLIENT: connect failed\n");
 			}
 			if constexpr (DEBUG) {
 				std::cout << "Client connected\n";
@@ -99,6 +100,9 @@ public:
 		} else {
 			// UDP connection - no connection needed
 		}
+
+		setSocketTimeout(this->socket_fd, MAX_WAIT);
+
 
 		if constexpr (DEBUG) {
 			std::cout << "Client sending conn packet\n";
@@ -112,10 +116,10 @@ public:
 		receive(&conacc_packet, sizeof(conacc_packet));
 
 		if (conacc_packet.type != 2) {
-			throw std::runtime_error("ERROR: Received CONRJT packet instead of CONACC\n");
+			throw std::runtime_error("ERROR: CLIENT: Received CONRJT packet instead of CONACC\n");
 		}
 		if (conacc_packet.session_id != this->session_id) {
-			throw std::runtime_error("ERROR: Received CONACC packet with incorrect session_id\n");
+			throw std::runtime_error("ERROR: CLIENT: Received CONACC packet with incorrect session_id\n");
 		}
 		if constexpr (DEBUG) {
 			std::cout << "Client received conacc packet with session_id: " << conacc_packet.session_id << "\n";
@@ -126,14 +130,13 @@ public:
 		while (payload_length > 0) {
 			DATA_HEADER data_packet{.type = 4, .session_id = this->session_id, .packet_number = this->cur_packet_number, .data_length = (uint32_t) std::min(MAX_DATA_SIZE, payload_length)};
 			send(&data_packet, sizeof(data_packet));
-
 			if constexpr (DEBUG) {
-				std::cout << "Client sent data_header packet with session_id: " << data_packet.session_id << " and data_length: " << data_packet.data_length << "\n";
+				std::cout << "Client sent data header with session_id: " << data_packet.session_id << " and packet number: " << data_packet.packet_number << "\n";
 			}
-			send(this->data.get() + this->cur_packet_number * MAX_DATA_SIZE, data_packet.data_length);
+			send(data.get() + (cur_packet_number * MAX_DATA_SIZE), data_packet.data_length);
 
 			if constexpr (DEBUG) {
-				std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and data_length: " << data_packet.data_length << "\n";
+				std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and packet number: " << data_packet.packet_number << "\n";
 			}
 			if (this->protocol == "udpr"){
 				ACC acc_packet;
@@ -145,13 +148,13 @@ public:
 					std::cout << "Client received acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
 				}
 				if (acc_packet.type != 5) {
-					throw std::runtime_error("ERROR: Received RJT packet instead of ACC\n");
+					throw std::runtime_error("ERROR: CLIENT: Received RJT packet instead of ACC\n");
 				}
 				if (acc_packet.session_id != this->session_id) {
-					throw std::runtime_error("ERROR: Received ACC packet with incorrect session_id\n");
+					throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect session_id\n");
 				}
 				if (acc_packet.packet_number != this->cur_packet_number) {
-					throw std::runtime_error("ERROR: Received ACC packet with incorrect packet_number\n");
+					throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect packet_number\n");
 				}
 				if constexpr (DEBUG) {
 					std::cout << "Client received acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
@@ -167,7 +170,7 @@ public:
 		RCVD rcvd_packet;
 		receive(&rcvd_packet, sizeof(rcvd_packet));
 		if (rcvd_packet.type != 7) {
-			throw std::runtime_error("ERROR: Received RJT packet instead of RCVD\n");
+			throw std::runtime_error("ERROR: CLIENT: Received RJT packet instead of RCVD\n");
 		}
 		if constexpr (DEBUG) {
 			std::cout << "Client received rcvd packet with session_id: " << rcvd_packet.session_id << " and packet type=" << rcvd_packet.type << "\n";
@@ -179,7 +182,6 @@ public:
 	}
 
 	void start() {
-
 		this->get_data();
 		this->establish_connection();
 		this->send_data();

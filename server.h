@@ -47,8 +47,8 @@ protected:
 			this->protocol = "udp";
 			return;
 		}
-		if (listen(socket_fd, 5) < 0) {
-			throw std::runtime_error("ERROR: listen failed\n");
+		if (listen(socket_fd, 10) < 0) {
+			throw std::runtime_error("ERROR: SERVER: listen failed\n");
 		}
 		if constexpr (DEBUG) {
 			std::cout << "Server listening\n";
@@ -64,18 +64,22 @@ protected:
 	}
 
 	void receive_and_send_confirmations() {
+		setSocketTimeout(this->socket_fd, MAX_WAIT);
 		if constexpr (DEBUG) {
 			std::cout << "start of function: receive_and_send_confirmations()\n";
 		}
 		if (this->protocol == "tcp") {
 			socklen_t client_addr_len = sizeof(this->client_addr);
+			setSocketTimeout(this->socket_fd, 0);
 			this->client_fd = accept(socket_fd, (struct sockaddr *) &this->client_addr, &client_addr_len);
+			setSocketTimeout(this->socket_fd, MAX_WAIT);
 			if (this->client_fd < 0) {
-				throw std::runtime_error("ERROR: accept failed\n");
+				throw std::runtime_error("ERROR: SERVER: accept failed\n");
 			}
 			if constexpr (DEBUG) {
 				std::cout << "Server accepted\n";
 			}
+			setSocketTimeout(this->client_fd, MAX_WAIT);
 		}
 
 		CONN conn_packet;
@@ -84,18 +88,18 @@ protected:
 		}
 		receive(&conn_packet, sizeof(conn_packet));
 		if (conn_packet.type != 1) {
-			throw std::runtime_error("ERROR: invalid packet type (was expecting CONN packet)\n");
+			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting CONN packet)\n");
 		}
 		if constexpr (DEBUG) {
 			std::cout << "Server received connection packet with type: " << conn_packet.type << "\n";
 		}
 		if (this->protocol == "tcp") {
 			if (conn_packet.protocol_id != 1) {
-				throw std::runtime_error("ERROR: invalid protocol id\n");
+				throw std::runtime_error("ERROR: SERVER: invalid protocol id\n");
 			}
 		} else {
 			if (conn_packet.protocol_id != 2 && conn_packet.protocol_id != 3) {
-				throw std::runtime_error("ERROR: invalid protocol id\n");
+				throw std::runtime_error("ERROR: SERVER: invalid protocol id\n");
 			}
 			if (conn_packet.protocol_id == 3) {
 				this->protocol = "udpr";
@@ -126,7 +130,7 @@ protected:
 		}
 		if (data_header.type != 4) {
 			send_rjt_packet();
-			throw std::runtime_error("ERROR: invalid packet type (was expecting DATA packet)\n");
+			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting DATA packet)\n");
 		}
 		if (data_header.session_id != this->session_id) {
 			// If we get a packet with a different session_id (different client), we just send the rjt packet and do not throw an error
@@ -135,7 +139,7 @@ protected:
 		}
 		if (data_header.packet_number != this->current_packet_number++) {
 			current_packet_number--;
-			throw std::runtime_error("ERROR: invalid packet number\n");
+			throw std::runtime_error("ERROR: SERVER: invalid packet number\n");
 		}
 	}
 
@@ -155,7 +159,7 @@ protected:
 			DATA_HEADER data_header;
 			this->get_and_validate_data_header(data_header);
 			if (data_header.data_length > payload_length) {
-				throw std::runtime_error("ERROR: sum of data_lengths exceed payload_length (current data length is " + std::to_string(data_header.data_length) + " and remaining payload_length is " + std::to_string(payload_length) + ")\n");
+				throw std::runtime_error("ERROR: SERVER: sum of data_lengths exceed payload_length (current data length is " + std::to_string(data_header.data_length) + " and remaining payload_length is " + std::to_string(payload_length) + ")\n");
 			}
 			payload_length -= data_header.data_length;
 
@@ -165,6 +169,9 @@ protected:
 					std::cout << "Server receiving data of max size " << data_header.data_length - current_data_length << "\n";
 				}
 				receive(buff.get(), data_header.data_length - current_data_length);
+				if constexpr (DEBUG) {
+					std::cout << "Server received data of size " << data_header.data_length - current_data_length << "\n";
+				}
 				current_data_length += data_header.data_length - current_data_length;
 			}
 			if constexpr (DEBUG) {
@@ -197,7 +204,7 @@ public:
 		}
 		this->protocol = protocol;
 		if (this->protocol != "tcp" && this->protocol != "udp") {
-			throw std::runtime_error("ERROR: invalid protocol. Protocols supported: <tcp>, <udp>\n");
+			throw std::runtime_error("ERROR: SERVER: invalid protocol. Protocols supported: <tcp>, <udp>\n");
 		}
 		if (this->protocol == "tcp") {
 			this->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -205,7 +212,7 @@ public:
 			this->server_addr.sin_port = htons(port);
 			this->server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 			if (bind(socket_fd, (struct sockaddr *) &this->server_addr, sizeof(this->server_addr)) < 0) {
-				throw std::runtime_error("ERROR: bind failed\n");
+				throw std::runtime_error("ERROR: SERVER: bind failed\n");
 			}
 			if constexpr (DEBUG) {
 				std::cout << "Server bound\n";
@@ -216,7 +223,7 @@ public:
 			this->server_addr.sin_port = htons(port);
 			this->server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 			if (bind(socket_fd, (struct sockaddr *) &this->server_addr, sizeof(this->server_addr)) < 0) {
-				throw std::runtime_error("ERROR: bind failed\n");
+				throw std::runtime_error("ERROR: SERVER: bind failed\n");
 			}
 			if constexpr (DEBUG) {
 				std::cout << "Server bound\n";
