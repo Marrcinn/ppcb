@@ -24,6 +24,21 @@ private:
 	std::shared_ptr<char> data;
 	uint64_t payload_length;
 
+void send(void *data, uint32_t size) {
+	if (this->protocol == "tcp") {
+		tcpSend(this->socket_fd, data, size);
+	} else {
+		udpSend(this->socket_fd, data, size, &this->server_addr);
+	}
+}
+
+void receive(void *data, uint32_t size) {
+	if (this->protocol == "tcp") {
+		tcpReceive(this->socket_fd, data, size);
+	} else {
+		udpReceive(this->socket_fd, data, size, &this->server_addr);
+	}
+}
 
 public:
 	Client(std::string protocol, std::string address, int port) {
@@ -34,17 +49,22 @@ public:
 			this->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 			this->server_addr = get_tcp_server_address(address.c_str(), port);
 		}
+		if (this->protocol == "udp") {
+			this->protocol_id = 2;
+			this->socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+			this->server_addr = udp_get_server_address(address.c_str(), port);
+		}
 	}
 
 	void get_data() {
 		// Determine the size of the data in std::cin
-		if constexpr (DEBUG){
+		if constexpr (DEBUG) {
 			std::cout << "Getting data\n";
 		}
 		std::cin.seekg(0, std::ios::end);
 		this->payload_length = std::cin.tellg();
 
-		if constexpr (DEBUG){
+		if constexpr (DEBUG) {
 			std::cout << "Payload length: " << this->payload_length << "\n";
 		}
 
@@ -68,19 +88,26 @@ public:
 			if constexpr (DEBUG) {
 				std::cout << "Client connected\n";
 			}
+		} else {
+			// UDP connection
 		}
 
-
+		if constexpr (DEBUG) {
+			std::cout << "Client sending conn packet\n";
+		}
 		CONN conn_packet{.type = 1, .session_id = this->session_id, .protocol_id = protocol_id, .payload_length = this->payload_length};
-		if (send(this->socket_fd, &conn_packet, sizeof(conn_packet), 0) < 0) {
-			throw std::runtime_error("ERROR: send failed\n");
-		}
+		send(&conn_packet, sizeof(conn_packet));
 		if constexpr (DEBUG) {
 			std::cout << "Client sent conn packet with session_id: " << conn_packet.session_id << "\n";
 		}
 		CONACC conacc_packet;
-		if (recv(this->socket_fd, &conacc_packet, sizeof(conacc_packet), 0) < 0) {
-			throw std::runtime_error("ERROR: recv failed\n");
+		receive(&conacc_packet, sizeof(conacc_packet));
+
+		if (conacc_packet.type != 2) {
+			throw std::runtime_error("ERROR: Received CONRJT packet instead of CONACC\n");
+		}
+		if (conacc_packet.session_id != this->session_id) {
+			throw std::runtime_error("ERROR: Received CONACC packet with incorrect session_id\n");
 		}
 		if constexpr (DEBUG) {
 			std::cout << "Client received conacc packet with session_id: " << conacc_packet.session_id << "\n";
@@ -90,15 +117,13 @@ public:
 	void send_data() {
 		while (payload_length > 0) {
 			DATA_HEADER data_packet{.type = 4, .session_id = this->session_id, .packet_number = this->cur_packet_number, .data_length = (uint32_t) std::min(MAX_DATA_SIZE, payload_length)};
-			if (send(this->socket_fd, &data_packet, sizeof(data_packet), 0) < 0) {
-				throw std::runtime_error("ERROR: send failed\n");
-			}
+			send(&data_packet, sizeof(data_packet));
+
 			if constexpr (DEBUG) {
 				std::cout << "Client sent data_header packet with session_id: " << data_packet.session_id << " and data_length: " << data_packet.data_length << "\n";
 			}
-			if (send(this->socket_fd, this->data.get() + this->cur_packet_number * MAX_DATA_SIZE, data_packet.data_length, 0) < 0) {
-				throw std::runtime_error("ERROR: send failed\n");
-			}
+			send(this->data.get() + this->cur_packet_number * MAX_DATA_SIZE, data_packet.data_length);
+
 			if constexpr (DEBUG) {
 				std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and data_length: " << data_packet.data_length << "\n";
 			}
@@ -107,16 +132,14 @@ public:
 		}
 	}
 
-	void receive_confirmation(){
+	void receive_confirmation() {
 		RCVD rcvd_packet;
-		if (recv(this->socket_fd, &rcvd_packet, sizeof(rcvd_packet), 0) < 0) {
-			throw std::runtime_error("ERROR: recv failed\n");
-		}
+		receive(&rcvd_packet, sizeof(rcvd_packet));
 		if (rcvd_packet.type != 7) {
 			throw std::runtime_error("ERROR: Received RJT packet instead of RCVD\n");
 		}
 		if constexpr (DEBUG) {
-			std::cout << "Client received rcvd packet with session_id: " << rcvd_packet.session_id << " and packet type="<< rcvd_packet.type <<"\n";
+			std::cout << "Client received rcvd packet with session_id: " << rcvd_packet.session_id << " and packet type=" << rcvd_packet.type << "\n";
 		}
 	}
 
@@ -125,6 +148,7 @@ public:
 	}
 
 	void start() {
+
 		this->get_data();
 		this->establish_connection();
 		this->send_data();

@@ -12,10 +12,9 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	if (std::string(argv[1]) != "tcp" &&
-	    std::string(argv[1]) != "udp" &&
-	    std::string(argv[1]) != "udpr") {
+	    std::string(argv[1]) != "udp")  {
 		std::cerr
-		    << "ERROR: invalid protocol. Protocols supported: <tcp>, <udp>, <udpr>\n";
+		    << "ERROR: invalid protocol. Protocols supported: <tcp>, <udp>\n";
 		return 1;
 	}
 	try {
