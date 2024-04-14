@@ -48,11 +48,19 @@ public:
 			this->protocol_id = 1;
 			this->socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 			this->server_addr = get_tcp_server_address(address.c_str(), port);
+			return;
 		}
 		if (this->protocol == "udp") {
 			this->protocol_id = 2;
 			this->socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
 			this->server_addr = udp_get_server_address(address.c_str(), port);
+			return;
+		}
+		if (this->protocol == "udpr") {
+			this->protocol_id = 3;
+			this->socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+			this->server_addr = udp_get_server_address(address.c_str(), port);
+			return;
 		}
 	}
 
@@ -89,7 +97,7 @@ public:
 				std::cout << "Client connected\n";
 			}
 		} else {
-			// UDP connection
+			// UDP connection - no connection needed
 		}
 
 		if constexpr (DEBUG) {
@@ -127,6 +135,29 @@ public:
 			if constexpr (DEBUG) {
 				std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and data_length: " << data_packet.data_length << "\n";
 			}
+			if (this->protocol == "udpr"){
+				ACC acc_packet;
+				if constexpr (DEBUG) {
+					std::cout << "Client receiving acc packet\n";
+				}
+				receive(&acc_packet, sizeof(acc_packet));
+				if constexpr (DEBUG) {
+					std::cout << "Client received acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
+				}
+				if (acc_packet.type != 5) {
+					throw std::runtime_error("ERROR: Received RJT packet instead of ACC\n");
+				}
+				if (acc_packet.session_id != this->session_id) {
+					throw std::runtime_error("ERROR: Received ACC packet with incorrect session_id\n");
+				}
+				if (acc_packet.packet_number != this->cur_packet_number) {
+					throw std::runtime_error("ERROR: Received ACC packet with incorrect packet_number\n");
+				}
+				if constexpr (DEBUG) {
+					std::cout << "Client received acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
+				}
+			}
+
 			this->cur_packet_number++;
 			payload_length -= std::min(MAX_DATA_SIZE, payload_length);
 		}

@@ -97,6 +97,12 @@ protected:
 			if (conn_packet.protocol_id != 2 && conn_packet.protocol_id != 3) {
 				throw std::runtime_error("ERROR: invalid protocol id\n");
 			}
+			if (conn_packet.protocol_id == 3) {
+				this->protocol = "udpr";
+			}
+		}
+		if constexpr (DEBUG) {
+			std::cout << "Server received connection packet with protocol_id: " << (char) conn_packet.protocol_id + '0' << ". Current protocol is: "<< this->protocol <<"\n";
 		}
 		this->session_id = conn_packet.session_id;
 		this->payload_length = conn_packet.payload_length;
@@ -129,7 +135,6 @@ protected:
 		}
 		if (data_header.packet_number != this->current_packet_number++) {
 			current_packet_number--;
-			send_rjt_packet();
 			throw std::runtime_error("ERROR: invalid packet number\n");
 		}
 	}
@@ -137,6 +142,9 @@ protected:
 	void send_acc(DATA_HEADER &data_header) {
 		if (this->protocol == "udpr") {
 			ACC acc_packet{.type = 5, .session_id = data_header.session_id, .packet_number = data_header.packet_number};
+			if constexpr (DEBUG) {
+				std::cout << "Server sending acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
+			}
 			send(&acc_packet, sizeof(acc_packet));
 		}
 	}
@@ -158,6 +166,9 @@ protected:
 				}
 				receive(buff.get(), data_header.data_length - current_data_length);
 				current_data_length += data_header.data_length - current_data_length;
+			}
+			if constexpr (DEBUG) {
+				std::cout << "Server received data packet with session_id: " << data_header.session_id << " and data_length: " << data_header.data_length << "\n";
 			}
 			std::cout << std::string(buff.get(), data_header.data_length);
 			send_acc(data_header);
