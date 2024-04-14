@@ -1,8 +1,8 @@
 #pragma once
 #include <cstdint>
 
-constexpr bool DEBUG = false;
-constexpr uint64_t MAX_DATA_SIZE = 10;
+constexpr bool DEBUG = true;
+constexpr uint64_t MAX_DATA_SIZE = 64000;
 
 typedef struct __attribute__((__packed__)) {
 	uint8_t type;

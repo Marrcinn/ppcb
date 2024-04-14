@@ -84,7 +84,7 @@ protected:
 		}
 		receive(&conn_packet, sizeof(conn_packet));
 		if (conn_packet.type != 1) {
-			throw std::runtime_error("ERROR: invalid packet type\n");
+			throw std::runtime_error("ERROR: invalid packet type (was expecting CONN packet)\n");
 		}
 		if constexpr (DEBUG) {
 			std::cout << "Server received connection packet with type: " << conn_packet.type << "\n";
@@ -126,7 +126,7 @@ protected:
 		}
 		if (data_header.type != 4) {
 			send_rjt_packet();
-			throw std::runtime_error("ERROR: invalid packet type\n");
+			throw std::runtime_error("ERROR: invalid packet type (was expecting DATA packet)\n");
 		}
 		if (data_header.session_id != this->session_id) {
 			// If we get a packet with a different session_id (different client), we just send the rjt packet and do not throw an error
