@@ -129,11 +129,20 @@ public:
 	void send_data() {
 		while (payload_length > 0) {
 			DATA_HEADER data_packet{.type = 4, .session_id = this->session_id, .packet_number = this->cur_packet_number, .data_length = (uint32_t) std::min(MAX_DATA_SIZE, payload_length)};
-			send(&data_packet, sizeof(data_packet));
-			if constexpr (DEBUG) {
-				std::cout << "Client sent data header with session_id: " << data_packet.session_id << " and packet number: " << data_packet.packet_number << "\n";
+			if (this->protocol == "tcp"){
+				send(&data_packet, sizeof(data_packet));
+				if constexpr (DEBUG) {
+					std::cout << "Client sent data header with session_id: " << data_packet.session_id << " and packet number: " << data_packet.packet_number << "\n";
+				}
+				send(data.get() + (cur_packet_number * MAX_DATA_SIZE), data_packet.data_length);
 			}
-			send(data.get() + (cur_packet_number * MAX_DATA_SIZE), data_packet.data_length);
+			else {
+				char tmp[MAX_DATA_SIZE + sizeof(data_packet)];
+				memcpy(tmp, &data_packet, sizeof(data_packet));
+				memcpy(tmp + sizeof(data_packet), data.get() + (cur_packet_number * MAX_DATA_SIZE), data_packet.data_length);
+				send(tmp, sizeof(data_packet) + data_packet.data_length);
+			}
+
 
 			if constexpr (DEBUG) {
 				std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and packet number: " << data_packet.packet_number << "\n";

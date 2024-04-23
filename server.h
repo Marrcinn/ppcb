@@ -7,6 +7,7 @@
 #include <numeric>
 #include <stdexcept>
 #include <string>
+#include <cstring>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -19,7 +20,7 @@ private:
 	int socket_fd;
 	int client_fd;
 	std::string protocol;
-	std::shared_ptr<char> buff;
+	char buff[MAX_DATA_SIZE + sizeof(DATA_HEADER)];
 	uint64_t current_packet_number = 0;
 	uint64_t session_id;
 	uint64_t payload_length;
@@ -54,7 +55,7 @@ protected:
 			std::cout << "Server listening\n";
 		}
 	}
-
+	// Sends a connection accepted packet to the client.
 	void send_connacc() {
 		CONACC conacc_packet{.type = 2, .session_id = this->session_id};
 		send(&conacc_packet, sizeof(conacc_packet));
@@ -63,7 +64,8 @@ protected:
 		}
 	}
 
-	void receive_and_send_confirmations() {
+
+	void establish_confirm_connection() {
 		setSocketTimeout(this->socket_fd, MAX_WAIT);
 		if constexpr (DEBUG) {
 			std::cout << "start of function: receive_and_send_confirmations()\n";
@@ -123,19 +125,19 @@ protected:
 	}
 
 	// Validates data header. Throws runtime_error if the header is invalid for current connection.
-	void get_and_validate_data_header(DATA_HEADER &data_header) {
-		receive(&data_header, sizeof(data_header));
+	void validate_data_header(DATA_HEADER &data_header) {
 		if constexpr (DEBUG) {
 			std::cout << "Server got DATA_HEADER packet with type: " << data_header.type << " the expected packet size is " << data_header.data_length << " and session_id: " << data_header.session_id << "\n";
 		}
-		if (data_header.type != 4) {
-			send_rjt_packet();
-			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting DATA packet)\n");
-		}
+
 		if (data_header.session_id != this->session_id) {
 			// If we get a packet with a different session_id (different client), we just send the rjt packet and do not throw an error
 			// as not to disrupt the connection with the current client
 			send_rjt_packet();
+		}
+		if (data_header.type != 4) {
+			send_rjt_packet();
+			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting DATA packet)\n");
 		}
 		if (data_header.packet_number != this->current_packet_number++) {
 			current_packet_number--;
@@ -157,27 +159,41 @@ protected:
 	void receive_data() {
 		while (payload_length > 0) {
 			DATA_HEADER data_header;
-			this->get_and_validate_data_header(data_header);
+			if (this->protocol == "tcp") {
+				receive(&data_header, sizeof(data_header));
+			}
+			else{
+				receive(buff, sizeof(buff));
+				memcpy(&data_header, buff, sizeof(data_header));
+			}
+			this->validate_data_header(data_header);
 			if (data_header.data_length > payload_length) {
 				throw std::runtime_error("ERROR: SERVER: sum of data_lengths exceed payload_length (current data length is " + std::to_string(data_header.data_length) + " and remaining payload_length is " + std::to_string(payload_length) + ")\n");
 			}
 			payload_length -= data_header.data_length;
 
 			uint32_t current_data_length = 0;
-			while (current_data_length < data_header.data_length) {
-				if constexpr (DEBUG) {
-					std::cout << "Server receiving data of max size " << data_header.data_length - current_data_length << "\n";
+			if (this->protocol == "tcp") {
+				while (current_data_length < data_header.data_length) {
+					if constexpr (DEBUG) {
+						std::cout << "Server receiving data of max size " << data_header.data_length - current_data_length << "\n";
+					}
+					receive(buff, data_header.data_length - current_data_length);
+					if constexpr (DEBUG) {
+						std::cout << "Server received data of size " << data_header.data_length - current_data_length << "\n";
+					}
+					current_data_length += data_header.data_length - current_data_length;
 				}
-				receive(buff.get(), data_header.data_length - current_data_length);
-				if constexpr (DEBUG) {
-					std::cout << "Server received data of size " << data_header.data_length - current_data_length << "\n";
-				}
-				current_data_length += data_header.data_length - current_data_length;
 			}
 			if constexpr (DEBUG) {
 				std::cout << "Server received data packet with session_id: " << data_header.session_id << " and data_length: " << data_header.data_length << "\n";
 			}
-			std::cout << std::string(buff.get(), data_header.data_length);
+			if (this->protocol == "tcp"){
+				std::cout << std::string(buff, data_header.data_length);
+			}
+			else{
+				std::cout << std::string(buff + sizeof(DATA_HEADER), data_header.data_length);
+			}
 			send_acc(data_header);
 		}
 	}
@@ -198,7 +214,7 @@ protected:
 	}
 
 public:
-	Server(std::string protocol, int port) : buff{new char[64000]} {
+	Server(std::string protocol, int port){
 		if constexpr (DEBUG) {
 			std::cout << "Server starting\n";
 		}
@@ -235,7 +251,7 @@ public:
 			this->get_connection();
 			// This is the part where the server communicates with clients
 			try {
-				this->receive_and_send_confirmations();
+				this->establish_confirm_connection();
 				this->receive_data();
 				this->confirm_data();
 			} catch (std::exception &e) {

@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 
-constexpr bool DEBUG = true;
+constexpr bool DEBUG = false;
 constexpr uint64_t MAX_DATA_SIZE = 64000;
 constexpr uint8_t MAX_WAIT = 5;
 constexpr uint8_t MAX_RETRANSMITS = 5;
@@ -58,5 +58,5 @@ void setSocketTimeout(int socket_fd, int seconds);
 
 void tcpSend(int socket_fd, void *data, uint32_t size);
 void udpSend(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr);
-void tcpReceive(int socket_fd, void *data, uint32_t size);
-void udpReceive(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr);
+int tcpReceive(int socket_fd, void *data, uint32_t size);
+int udpReceive(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr);

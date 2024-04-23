@@ -1,5 +1,5 @@
 #include "common.h"
-
+#include <iostream>
 #include <stdexcept>
 #include <cstdlib>
 #include <sys/types.h>
@@ -103,7 +103,7 @@ void udpSend(int socket_fd, void *data, uint32_t size, struct sockaddr_in *serve
 	}
 }
 
-void tcpReceive(int socket_fd, void *data, uint32_t size) {
+int tcpReceive(int socket_fd, void *data, uint32_t size) {
 	uint32_t bytes_received = 0;
 	while (bytes_received < size) {
 		int received = recv(socket_fd, (uint8_t*) data + bytes_received, size - bytes_received, 0);
@@ -112,17 +112,19 @@ void tcpReceive(int socket_fd, void *data, uint32_t size) {
 		}
 		bytes_received += received;
 	}
+	return bytes_received;
 }
 
-void udpReceive(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr) {
+int udpReceive(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr) {
 	uint32_t bytes_received = 0;
-	while (bytes_received < size) {
-		socklen_t server_addr_len = sizeof(*server_addr);
-		int received = recvfrom(socket_fd, (uint8_t*) data + bytes_received, size - bytes_received, 0,
-		                             (struct sockaddr *) server_addr, &server_addr_len);
-		if (received <= 0) {
-			throw  std::runtime_error("ERROR: recvfrom failed\n");
-		}
-		bytes_received += received;
+	socklen_t server_addr_len = sizeof(*server_addr);
+	int received = recvfrom(socket_fd, (uint8_t*) data + bytes_received, size - bytes_received, 0,
+	                           (struct sockaddr *) server_addr, &server_addr_len);
+	if constexpr (DEBUG) {
+		std::cout << "Received " << received << " bytes\n";
 	}
+	if (received < 0) {
+		throw  std::runtime_error("ERROR: recvfrom failed\n");
+	}
+	return received;
 }
