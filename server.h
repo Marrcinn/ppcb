@@ -94,7 +94,7 @@ protected:
 			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting CONN packet)\n");
 		}
 		if constexpr (DEBUG) {
-			std::cout << "Server received connection packet with type: " << conn_packet.type << "\n";
+			std::cout << "Server received connection packet with type: " << (uint32_t) conn_packet.type << "\n";
 		}
 		if (this->protocol == "tcp") {
 			if (conn_packet.protocol_id != 1) {
@@ -109,7 +109,7 @@ protected:
 			}
 		}
 		if constexpr (DEBUG) {
-			std::cout << "Server received connection packet with protocol_id: " << (char) conn_packet.protocol_id + '0' << ". Current protocol is: "<< this->protocol <<"\n";
+			std::cout << "Server received connection packet with protocol_id: " << (uint32_t) conn_packet.protocol_id << ". Current protocol is: "<< this->protocol <<"\n";
 		}
 		this->session_id = conn_packet.session_id;
 		this->payload_length = ntohl(conn_packet.payload_length);

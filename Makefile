@@ -16,6 +16,9 @@ ppcbs.o: ppcbs.cpp common.h
 common.o: common.cpp common.h
 	$(CXX) $(CXXFLAGS) -c common.cpp
 
+all: ppcbc ppcbs
+
+
 clean:
 	rm -f ppcbc ppcbs *.o
 
