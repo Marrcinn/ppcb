@@ -80,6 +80,9 @@ void setSocketTimeout(int socket_fd, int seconds) {
 // Guarantees that the amount of data sent will be equal to
 // the amount of data requested, otherwise throws error.
 void tcpSend(int socket_fd, void *data, uint32_t size) {
+	if constexpr (DEBUG) {
+		std::cout << "Sending " << size << " bytes via tcpSend\n";
+	}
 	uint32_t bytes_sent = 0;
 	while (bytes_sent < size) {
 		int sent = send(socket_fd, (uint8_t*) data + bytes_sent, size - bytes_sent, 0);

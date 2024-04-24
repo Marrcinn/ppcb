@@ -134,7 +134,7 @@ public:
 				if constexpr (DEBUG) {
 					std::cout << "Client sent data header with session_id: " << data_packet.session_id << " and packet number: " << data_packet.packet_number << "\n";
 				}
-				send(data.get() + (cur_packet_number * MAX_DATA_SIZE), data_packet.data_length);
+				send(data.get() + (cur_packet_number * MAX_DATA_SIZE), ntohs(data_packet.data_length));
 			}
 			else {
 				char tmp[MAX_DATA_SIZE + sizeof(data_packet)];
