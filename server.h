@@ -72,8 +72,9 @@ protected:
 		}
 		if (this->protocol == "tcp") {
 			socklen_t client_addr_len = sizeof(this->client_addr);
-			setSocketTimeout(this->socket_fd, 0);
+			setSocketTimeout(this->socket_fd, 0); // We do not want a socket timeout for accepting clients
 			this->client_fd = accept(socket_fd, (struct sockaddr *) &this->client_addr, &client_addr_len);
+			// After accepting, we don't want to wait more than MAX_WAIT sec.
 			setSocketTimeout(this->socket_fd, MAX_WAIT);
 			if (this->client_fd < 0) {
 				throw std::runtime_error("ERROR: SERVER: accept failed\n");
@@ -111,7 +112,7 @@ protected:
 			std::cout << "Server received connection packet with protocol_id: " << (char) conn_packet.protocol_id + '0' << ". Current protocol is: "<< this->protocol <<"\n";
 		}
 		this->session_id = conn_packet.session_id;
-		this->payload_length = conn_packet.payload_length;
+		this->payload_length = ntohl(conn_packet.payload_length);
 		this->current_packet_number = 0;
 		if constexpr (DEBUG) {
 			std::cout << "Server received connection packet with session_id: " << conn_packet.session_id << " and payload length " << this->payload_length << "\n";
@@ -120,7 +121,7 @@ protected:
 	}
 
 	void send_rjt_packet() {
-		RJT rjt_packet{.type = 6, .session_id = this->session_id, .packet_number = this->current_packet_number};
+		RJT rjt_packet{.type = 6, .session_id = this->session_id, .packet_number = htonl(this->current_packet_number)};
 		send(&rjt_packet, sizeof(rjt_packet));
 	}
 
@@ -129,7 +130,6 @@ protected:
 		if constexpr (DEBUG) {
 			std::cout << "Server got DATA_HEADER packet with type: " << data_header.type << " the expected packet size is " << data_header.data_length << " and session_id: " << data_header.session_id << "\n";
 		}
-
 		if (data_header.session_id != this->session_id) {
 			// If we get a packet with a different session_id (different client), we just send the rjt packet and do not throw an error
 			// as not to disrupt the connection with the current client
@@ -139,13 +139,14 @@ protected:
 			send_rjt_packet();
 			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting DATA packet)\n");
 		}
-		if (data_header.packet_number != this->current_packet_number++) {
+		if (ntohl(data_header.packet_number) != this->current_packet_number++) {
 			current_packet_number--;
 			throw std::runtime_error("ERROR: SERVER: invalid packet number\n");
 		}
 	}
 
 	void send_acc(DATA_HEADER &data_header) {
+		// We only send ACC packets to udpr client
 		if (this->protocol == "udpr") {
 			ACC acc_packet{.type = 5, .session_id = data_header.session_id, .packet_number = data_header.packet_number};
 			if constexpr (DEBUG) {
@@ -167,26 +168,26 @@ protected:
 				memcpy(&data_header, buff, sizeof(data_header));
 			}
 			this->validate_data_header(data_header);
-			if (data_header.data_length > payload_length) {
+			if (ntohs(data_header.data_length) > payload_length) {
 				throw std::runtime_error("ERROR: SERVER: sum of data_lengths exceed payload_length (current data length is " + std::to_string(data_header.data_length) + " and remaining payload_length is " + std::to_string(payload_length) + ")\n");
 			}
-			payload_length -= data_header.data_length;
+			payload_length -= ntohs(data_header.data_length);
 
 			uint32_t current_data_length = 0;
 			if (this->protocol == "tcp") {
-				while (current_data_length < data_header.data_length) {
+				while (current_data_length < ntohs(data_header.data_length)) {
 					if constexpr (DEBUG) {
-						std::cout << "Server receiving data of max size " << data_header.data_length - current_data_length << "\n";
+						std::cout << "Server receiving data of max size " << ntohs(data_header.data_length) - current_data_length << "\n";
 					}
-					receive(buff, data_header.data_length - current_data_length);
+					receive(buff, ntohs(data_header.data_length) - current_data_length);
 					if constexpr (DEBUG) {
-						std::cout << "Server received data of size " << data_header.data_length - current_data_length << "\n";
+						std::cout << "Server received data of size " << ntohs(data_header.data_length) - current_data_length << "\n";
 					}
-					current_data_length += data_header.data_length - current_data_length;
+					current_data_length += ntohs(data_header.data_length) - current_data_length;
 				}
 			}
 			if constexpr (DEBUG) {
-				std::cout << "Server received data packet with session_id: " << data_header.session_id << " and data_length: " << data_header.data_length << "\n";
+				std::cout << "Server received data packet with session_id: " << data_header.session_id << " and data_length: " << ntohs(data_header.data_length) << "\n";
 			}
 			if (this->protocol == "tcp"){
 				std::cout << std::string(buff, data_header.data_length);
@@ -199,6 +200,9 @@ protected:
 	}
 
 	void close_connection() {
+		if (this->protocol == "udpr"){
+			this->protocol = "udp";
+		}
 		close(this->client_fd);
 		this->payload_length = 0;
 		this->current_packet_number = 0;
