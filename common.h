@@ -50,11 +50,9 @@ typedef struct __attribute__((__packed__)) {
 struct sockaddr_in get_tcp_server_address(char const *host, int port);
 struct sockaddr_in udp_get_server_address(char const *host, uint16_t port);
 
-
 uint64_t generateSimpleRandomUint64();
 
 void setSocketTimeout(int socket_fd, int seconds);
-
 
 void tcpSend(int socket_fd, void *data, uint32_t size);
 void udpSend(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr);

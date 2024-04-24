@@ -107,7 +107,7 @@ public:
 		if constexpr (DEBUG) {
 			std::cout << "Client sending conn packet\n";
 		}
-		CONN conn_packet{.type = 1, .session_id = this->session_id, .protocol_id = protocol_id, .payload_length = this->payload_length};
+		CONN conn_packet{.type = 1, .session_id = this->session_id, .protocol_id = protocol_id, .payload_length = ntohl(this->payload_length)};
 		send(&conn_packet, sizeof(conn_packet));
 		if constexpr (DEBUG) {
 			std::cout << "Client sent conn packet with session_id: " << conn_packet.session_id << "\n";
@@ -128,7 +128,7 @@ public:
 
 	void send_data() {
 		while (payload_length > 0) {
-			DATA_HEADER data_packet{.type = 4, .session_id = this->session_id, .packet_number = this->cur_packet_number, .data_length = (uint32_t) std::min(MAX_DATA_SIZE, payload_length)};
+			DATA_HEADER data_packet{.type = 4, .session_id = this->session_id, .packet_number = ntohs(this->cur_packet_number), .data_length = ntohs((uint32_t) std::min(MAX_DATA_SIZE, payload_length))};
 			if (this->protocol == "tcp"){
 				send(&data_packet, sizeof(data_packet));
 				if constexpr (DEBUG) {
@@ -162,7 +162,7 @@ public:
 				if (acc_packet.session_id != this->session_id) {
 					throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect session_id\n");
 				}
-				if (acc_packet.packet_number != this->cur_packet_number) {
+				if (acc_packet.packet_number != ntohs(this->cur_packet_number)) {
 					throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect packet_number\n");
 				}
 				if constexpr (DEBUG) {
