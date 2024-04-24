@@ -189,12 +189,15 @@ protected:
 			if constexpr (DEBUG) {
 				std::cout << "Server received data packet with session_id: " << data_header.session_id << " and data_length: " << ntohs(data_header.data_length) << "\n";
 			}
+			// If the protocol is udp or udpr, the data is offset by the size of the data header.
+			// We need to add std::flush to the end of the print statement to ensure that the data is printed immediately.
 			if (this->protocol == "tcp"){
-				std::cout << std::string(buff, data_header.data_length);
+				std::cout << std::string(buff, ntohs(data_header.data_length)) << std::flush;
 			}
 			else{
-				std::cout << std::string(buff + sizeof(DATA_HEADER), data_header.data_length);
+				std::cout << std::string(buff + sizeof(DATA_HEADER), ntohs(data_header.data_length)) << std::flush;
 			}
+			// We send confirmation (for protocols that require the confirmations).
 			send_acc(data_header);
 		}
 	}
