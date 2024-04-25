@@ -41,6 +41,26 @@ void receive(void *data, uint32_t size) {
 	}
 }
 
+void validate_acc_packet(ACC &acc_packet) {
+	if constexpr (DEBUG) {
+		std::cout << "Received acc packet: " <<
+			  "type: " << (int) acc_packet.type <<
+			  "session_id: " << acc_packet.session_id <<
+			  "packet_number: " << acc_packet.packet_number <<
+			  "\n";
+	}
+	if (acc_packet.type != 6) {
+		throw std::runtime_error("ERROR: CLIENT: Received RJT packet instead of ACC\n");
+	}
+	if (acc_packet.session_id != this->session_id) {
+		throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect session_id\n");
+	}
+	if (acc_packet.packet_number != this->cur_packet_number) {
+		// No matter what the packet_number is, if it is invalid we retransmit the data.
+		throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect packet_number\n");
+	}
+}
+
 public:
 	Client(std::string protocol, std::string address, int port) {
 		this->protocol = protocol;
@@ -150,33 +170,18 @@ public:
 				memcpy(tmp, &data_packet, sizeof(data_packet));
 				memcpy(tmp + sizeof(data_packet), data.get() + (cur_packet_number * MAX_DATA_SIZE), ntohl(data_packet.data_length));
 				send(tmp, sizeof(data_packet) + ntohl(data_packet.data_length));
+				if (this->protocol == "udpr"){
+					ACC acc_packet;
+					if constexpr (DEBUG) {
+						std::cout << "Client receiving acc packet\n";
+					}
+					receive(&acc_packet, sizeof(acc_packet));
+					validate_acc_packet(acc_packet);
+				}
 			}
 			if constexpr (DEBUG) {
 				std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and packet number: " << ntohll(data_packet.packet_number) << "\n";
 			}
-			if (this->protocol == "udpr"){
-				ACC acc_packet;
-				if constexpr (DEBUG) {
-					std::cout << "Client receiving acc packet\n";
-				}
-				receive(&acc_packet, sizeof(acc_packet));
-				if constexpr (DEBUG) {
-					std::cout << "Client received acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
-				}
-				if (acc_packet.type != 5) {
-					throw std::runtime_error("ERROR: CLIENT: Received RJT packet instead of ACC\n");
-				}
-				if (acc_packet.session_id != this->session_id) {
-					throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect session_id\n");
-				}
-				if (ntohll(acc_packet.packet_number) !=this->cur_packet_number) {
-					throw std::runtime_error("ERROR: CLIENT: Received ACC packet with incorrect packet_number\n");
-				}
-				if constexpr (DEBUG) {
-					std::cout << "Client received acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
-				}
-			}
-
 			this->cur_packet_number++;
 			payload_length -= std::min(MAX_DATA_SIZE, payload_length);
 		}
