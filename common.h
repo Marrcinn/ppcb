@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <arpa/inet.h>
 
 constexpr bool DEBUG = true;
 constexpr uint64_t MAX_DATA_SIZE = 64000;
@@ -53,6 +54,23 @@ struct sockaddr_in udp_get_server_address(char const *host, uint16_t port);
 uint64_t generateSimpleRandomUint64();
 
 void setSocketTimeout(int socket_fd, int seconds);
+
+inline uint64_t ntohll(int64_t value) {
+#if __BYTE_ORDER__ == __BIG_ENDIAN
+	return value;
+#else
+	return (((int64_t) ntohl(value)) << 32) + ntohl(value >> 32);
+#endif
+}
+
+inline uint64_t htonll(uint64_t n)
+{
+#if __BYTE_ORDER == __BIG_ENDIAN
+	return n;
+#else
+	return (((uint64_t)htonl(n)) << 32) + htonl(n >> 32);
+#endif
+}
 
 void tcpSend(int socket_fd, void *data, uint32_t size);
 void udpSend(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr);

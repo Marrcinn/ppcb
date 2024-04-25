@@ -31,16 +31,9 @@ int main(int argc, char *argv[]){
 		std::cerr << "ERROR: invalid port. Ports must be between 0 and 65535\n";
 		return 1;
 	}
-	try{
-		Client client{protocol, address, port};
-		client.start();
-	}
-	catch (const std::exception &e){
-		std::cerr << e.what();
-		return 1;
-	}
+	Client client{protocol, address, port};
+	return client.start();
 
 
 
-	return 0;
 }
