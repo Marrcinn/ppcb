@@ -76,6 +76,7 @@ protected:
 			std::cout << "Server listening\n";
 		}
 	}
+
 	// Sends a connection accepted packet to the client.
 	void send_connacc() {
 		CONACC conacc_packet{.type = 2, .session_id = this->session_id};
@@ -160,6 +161,9 @@ protected:
 			// If we get a packet with a different session_id (different client), we just send the rjt packet and do not throw an error
 			// as not to disrupt the connection with the current client
 			send_rjt_packet();
+			if constexpr (DEBUG) {
+				std::cout << "Server received data packet with incorrect session_id\n";
+			}
 		}
 		if (data_header.type != 4) {
 			send_rjt_packet();
@@ -176,7 +180,7 @@ protected:
 		if (this->protocol == "udpr") {
 			ACC acc_packet{.type = 5, .session_id = data_header.session_id, .packet_number = htonll(data_header.packet_number)};
 			if constexpr (DEBUG) {
-				std::cout << "Server sending acc packet with session_id: " << acc_packet.session_id << " and packet type=" << acc_packet.type << "\n";
+				std::cout << "Server sending acc packet with session_id: " << acc_packet.session_id << " and packet type=" << (int) acc_packet.type << "\n";
 			}
 			send(&acc_packet, sizeof(acc_packet));
 		}

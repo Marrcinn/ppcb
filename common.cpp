@@ -95,6 +95,9 @@ void tcpSend(int socket_fd, void *data, uint32_t size) {
 
 // Sends the whole data, possibly with more than one datagram.
 void udpSend(int socket_fd, void *data, uint32_t size, struct sockaddr_in *server_addr) {
+	if constexpr (DEBUG) {
+		std::cout << "Sending " << size << " bytes via udpSend\n";
+	}
 	uint32_t bytes_sent = 0;
 	while (bytes_sent < size) {
 		int sent = sendto(socket_fd, (uint8_t*) data + bytes_sent, size - bytes_sent, 0,
