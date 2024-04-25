@@ -91,7 +91,7 @@ protected:
 		if constexpr (DEBUG) {
 			std::cout << "start of function: receive_and_send_confirmations()\n";
 		}
-		setSocketTimeout(this->socket_fd, MAX_WAIT);
+		setSocketTimeout(this->socket_fd, 0);
 		if (this->protocol == "tcp") {
 			socklen_t client_addr_len = sizeof(this->client_addr);
 			setSocketTimeout(this->socket_fd, 0);// We do not want a socket timeout for accepting clients
@@ -112,6 +112,7 @@ protected:
 			std::cout << "Server receiving connection packet\n";
 		}
 		receive(&conn_packet, sizeof(conn_packet));
+		setSocketTimeout(this->socket_fd, MAX_WAIT); // For udp the recv of conn packet should not have time limit.
 		if (conn_packet.type != 1) {
 			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting CONN packet)\n");
 		}
@@ -147,6 +148,17 @@ protected:
 		send(&rjt_packet, sizeof(rjt_packet));
 	}
 
+	void send_acc(DATA_HEADER &data_header) {
+		// We only send ACC packets to udpr client
+		if (this->protocol == "udpr") {
+			ACC acc_packet{.type = 5, .session_id = data_header.session_id, .packet_number = htonll(data_header.packet_number)};
+			if constexpr (DEBUG) {
+				std::cout << "Server sending acc packet with session_id: " << acc_packet.session_id << " and packet type=" << (int) acc_packet.type << "\n";
+			}
+			send(&acc_packet, sizeof(acc_packet));
+		}
+	}
+
 	// Validates data header. Throws runtime_error if the header is invalid for current connection.
 	void validate_data_header(DATA_HEADER &data_header) {
 		data_header.data_length = ntohl(data_header.data_length);
@@ -164,10 +176,22 @@ protected:
 			if constexpr (DEBUG) {
 				std::cout << "Server received data packet with incorrect session_id\n";
 			}
+			return;
+		}
+		if (data_header.type == 1){ // We got back CONN packet from our current client, so, if it is the 0th packet, we send conack.
+			if (data_header.packet_number == 0) {
+				send_connacc();
+			}
+			return;
 		}
 		if (data_header.type != 4) {
 			send_rjt_packet();
 			throw std::runtime_error("ERROR: SERVER: invalid packet type (was expecting DATA packet)\n");
+		}
+		if (data_header.packet_number < this->current_packet_number) {
+			send_acc(data_header); // We send acc packet again, as client may not have received it.
+			throw std::runtime_error("ERROR: SERVER: invalid packet number\n");
+			return;
 		}
 		if (data_header.packet_number != this->current_packet_number++) {
 			current_packet_number--;
@@ -175,30 +199,31 @@ protected:
 		}
 	}
 
-	void send_acc(DATA_HEADER &data_header) {
-		// We only send ACC packets to udpr client
-		if (this->protocol == "udpr") {
-			ACC acc_packet{.type = 5, .session_id = data_header.session_id, .packet_number = htonll(data_header.packet_number)};
-			if constexpr (DEBUG) {
-				std::cout << "Server sending acc packet with session_id: " << acc_packet.session_id << " and packet type=" << (int) acc_packet.type << "\n";
-			}
-			send(&acc_packet, sizeof(acc_packet));
-		}
-	}
+
 
 
 	void receive_data() {
 		while (payload_length > 0) {
+			int retries = 0;
 			DATA_HEADER data_header;
-			if (this->protocol == "tcp") {
-				receive(&data_header, sizeof(data_header));
-			} else {
-				receive(buff, sizeof(buff));
-				memcpy(&data_header, buff, sizeof(data_header));
-			}
-			this->validate_data_header(data_header);
-			if (data_header.data_length > payload_length) {
-				throw std::runtime_error("ERROR: SERVER: sum of data_lengths exceed payload_length (current data length is " + std::to_string(data_header.data_length) + " and remaining payload_length is " + std::to_string(payload_length) + ")\n");
+			try {
+				if (this->protocol == "tcp") {
+					receive(&data_header, sizeof(data_header));
+				} else {
+					receive(buff, sizeof(buff));
+					memcpy(&data_header, buff, sizeof(data_header));
+				}
+				this->validate_data_header(data_header);
+				if (data_header.data_length > payload_length) {
+					throw std::runtime_error("ERROR: SERVER: sum of data_lengths exceed payload_length (current data length is " + std::to_string(data_header.data_length) + " and remaining payload_length is " + std::to_string(payload_length) + ")\n");
+				}
+				send_acc(data_header);
+			} catch (std::runtime_error &e) {
+				retries++;
+				if (this->protocol == "udpr" && retries <= MAX_RETRANSMITS) {
+					continue;
+				}
+				throw e;
 			}
 			payload_length -= data_header.data_length;
 
@@ -226,7 +251,6 @@ protected:
 				std::cout << std::string(buff + sizeof(DATA_HEADER), data_header.data_length) << std::flush;
 			}
 			// We send confirmation (for protocols that require the confirmations).
-			send_acc(data_header);
 		}
 	}
 	// We close the connection with the client and restore the variables to their initial state.

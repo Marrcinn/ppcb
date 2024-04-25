@@ -92,7 +92,6 @@ public:
 		int bytes_read = 0;
 		while (true) {
 			int n_read = read(STDIN_FILENO, raw_data + bytes_read, buf_size - bytes_read);
-			std::cout<<n_read<<std::endl;
 			if (n_read <= 0) {
 				break;
 			}
@@ -122,7 +121,6 @@ public:
 		}
 
 		setSocketTimeout(this->socket_fd, MAX_WAIT);
-
 
 		if constexpr (DEBUG) {
 			std::cout << "Client sending conn packet\n";
@@ -160,29 +158,42 @@ public:
 	}
 
 	void send_data() {
+		int retries = 0;
 		while (payload_length > 0) {
-			DATA_HEADER data_packet{.type = 4, .session_id = this->session_id, .packet_number = htonll(this->cur_packet_number), .data_length = htonl((uint32_t) std::min(MAX_DATA_SIZE, payload_length))};
-			if (this->protocol == "tcp"){
-				send(&data_packet, sizeof(data_packet));
-				send(data.get() + (cur_packet_number * MAX_DATA_SIZE), ntohl(data_packet.data_length));
-			}
-			else {
-				char tmp[MAX_DATA_SIZE + sizeof(data_packet)];
-				memcpy(tmp, &data_packet, sizeof(data_packet));
-				memcpy(tmp + sizeof(data_packet), data.get() + (cur_packet_number * MAX_DATA_SIZE), ntohl(data_packet.data_length));
-				send(tmp, sizeof(data_packet) + ntohl(data_packet.data_length));
-				if (this->protocol == "udpr"){
-					ACC acc_packet;
-					if constexpr (DEBUG) {
-						std::cout << "Client receiving acc packet\n";
+			try {
+				DATA_HEADER data_packet{.type = 4, .session_id = this->session_id, .packet_number = htonll(this->cur_packet_number), .data_length = htonl((uint32_t) std::min(MAX_DATA_SIZE, payload_length))};
+				if (this->protocol == "tcp") {
+					send(&data_packet, sizeof(data_packet));
+					send(data.get() + (cur_packet_number * MAX_DATA_SIZE), ntohl(data_packet.data_length));
+				} else {
+					char tmp[MAX_DATA_SIZE + sizeof(data_packet)];
+					memcpy(tmp, &data_packet, sizeof(data_packet));
+					memcpy(tmp + sizeof(data_packet), data.get() + (cur_packet_number * MAX_DATA_SIZE), ntohl(data_packet.data_length));
+					send(tmp, sizeof(data_packet) + ntohl(data_packet.data_length));
+					if (this->protocol == "udpr") {
+						ACC acc_packet;
+						if constexpr (DEBUG) {
+							std::cout << "Client receiving acc packet\n";
+						}
+						receive(&acc_packet, sizeof(acc_packet));
+						validate_acc_packet(acc_packet);
 					}
-					receive(&acc_packet, sizeof(acc_packet));
-					validate_acc_packet(acc_packet);
+				}
+				if constexpr (DEBUG) {
+					std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and packet number: " << ntohll(data_packet.packet_number) << "\n";
 				}
 			}
-			if constexpr (DEBUG) {
-				std::cout << "Client sent data packet with session_id: " << data_packet.session_id << " and packet number: " << ntohll(data_packet.packet_number) << "\n";
+			catch (std::runtime_error &e) {
+				if (this->protocol == "udpr") {
+					retries++;
+					if (retries > MAX_RETRANSMITS) {
+						throw std::runtime_error("ERROR: CLIENT: Maximum number of retransmits reached\n");
+					}
+					continue;
+				}
+				throw e;
 			}
+			retries = 0; // As there was a success, we reset the number of retries
 			this->cur_packet_number++;
 			payload_length -= std::min(MAX_DATA_SIZE, payload_length);
 		}

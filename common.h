@@ -2,7 +2,7 @@
 #include <cstdint>
 #include <arpa/inet.h>
 
-constexpr bool DEBUG = true;
+constexpr bool DEBUG = false;
 constexpr uint64_t MAX_DATA_SIZE = 64000;
 constexpr uint8_t MAX_WAIT = 5;
 constexpr uint8_t MAX_RETRANSMITS = 5;

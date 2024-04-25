@@ -7,10 +7,10 @@ ppcbc: ppcbc.o common.o
 ppcbs: ppcbs.o common.o
 	$(CXX) $(CXXFLAGS) -o ppcbs ppcbs.o common.o
 
-ppcbc.o: ppcbc.cpp common.h
+ppcbc.o: ppcbc.cpp common.h client.h
 	$(CXX) $(CXXFLAGS) -c ppcbc.cpp
 
-ppcbs.o: ppcbs.cpp common.h
+ppcbs.o: ppcbs.cpp common.h server.h
 	$(CXX) $(CXXFLAGS) -c ppcbs.cpp
 
 common.o: common.cpp common.h
