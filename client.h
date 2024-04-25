@@ -66,26 +66,25 @@ public:
 	}
 
 	void get_data() {
-		// Determine the size of the data in std::cin
-		if constexpr (DEBUG) {
-			std::cout << "Getting data\n";
+		int buf_size = 64400; // By default we will read 64400 bytes and increase the buffer if needed.
+		char *raw_data = new char[buf_size];
+		int bytes_read = 0;
+		while (true) {
+			int n_read = read(STDIN_FILENO, raw_data + bytes_read, buf_size - bytes_read);
+			std::cout<<n_read<<std::endl;
+			if (n_read <= 0) {
+				break;
+			}
+			bytes_read += n_read;
+			if (bytes_read == buf_size) {
+				buf_size *= 2;
+				char *new_raw_data = new char[buf_size];
+				memcpy(new_raw_data, raw_data, bytes_read);
+				delete[] raw_data;
+				raw_data = new_raw_data;
+			}
 		}
-		std::cin.seekg(0, std::ios::end);
-		this->payload_length = std::cin.tellg();
-
-		if constexpr (DEBUG) {
-			std::cout << "Payload length: " << this->payload_length << "\n";
-		}
-
-		std::cin.seekg(0, std::ios::beg);
-
-		// Allocate a new char array
-		char *raw_data = new char[payload_length];
-
-		// Read the data from std::cin into the char array
-		std::cin.read(raw_data, payload_length);
-
-		// Convert the raw char array to a shared_ptr<char>
+		payload_length = bytes_read;
 		this->data = std::shared_ptr<char>(raw_data, std::default_delete<char[]>());
 	}
 
@@ -108,12 +107,25 @@ public:
 			std::cout << "Client sending conn packet\n";
 		}
 		CONN conn_packet{.type = 1, .session_id = this->session_id, .protocol_id = protocol_id, .payload_length = htonll(this->payload_length)};
-		send(&conn_packet, sizeof(conn_packet));
-		if constexpr (DEBUG) {
-			std::cout << "Client sent conn packet with session_id: " << conn_packet.session_id << "\n";
-		}
 		CONACC conacc_packet;
-		receive(&conacc_packet, sizeof(conacc_packet));
+		int retries = 0;
+		while (retries <= MAX_RETRANSMITS){
+			try {
+				retries++;
+				send(&conn_packet, sizeof(conn_packet));
+				if constexpr (DEBUG) {
+					std::cout << "Client sent conn packet with session_id: " << conn_packet.session_id << "\n";
+				}
+				receive(&conacc_packet, sizeof(conacc_packet));
+				break;
+			}
+			catch (std::runtime_error &e){
+				if (protocol == "udpr" && retries <= MAX_RETRANSMITS){
+					continue;
+				}
+				throw e;
+			}
+		}
 
 		if (conacc_packet.type != 2) {
 			throw std::runtime_error("ERROR: CLIENT: Received CONRJT packet instead of CONACC\n");
